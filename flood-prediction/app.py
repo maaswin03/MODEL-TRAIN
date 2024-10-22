@@ -1,84 +1,68 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-
-x=pd.read_csv("./tamilnadu.csv")
-y=pd.read_csv("./tamilnadu.csv")
-
-y1=list(x["YEAR"])
-x1=list(x["Oct-Dec"])
-z1=list(x["OCT"])
-w1=list(x["NOV"])
-
-flood=[]
-Nov=[]
-sub=[]
-
-
-for i in range(0,len(x1)):
-    if x1[i]>500:
-        flood.append('1')
-    else:
-        flood.append('0')
-
-
-for k in range(0,len(x1)):
-    Nov.append(z1[k]/3)
-
-for k in range(0,len(x1)):
-    sub.append(abs(w1[k]-z1[k]))
-
-df = pd.DataFrame({'flood':flood})
-df1=pd.DataFrame({'per_10_days':Nov})
-
-x["flood"]=flood
-x["avgnov"]=Nov
-x["sub"]=sub
-
-
-x.to_csv("out.csv")
-print((x))
-
-import scipy 
-from scipy.stats import spearmanr
-
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import scale
-from sklearn.linear_model import LogisticRegression
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn import preprocessing
+from sklearn.metrics import accuracy_score
 
+x = pd.read_csv("./tamilnadu.csv")
 
-X = x.iloc[:,[16,20,21]].values
-y1=x.iloc[:,19].values
+y1 = list(x["YEAR"])
+x1 = list(x["Oct-Dec"])
+z1 = list(x["OCT"])
+w1 = list(x["NOV"])
 
-(X_train, X_test, Y_train, Y_test) = train_test_split(X, y1, random_state=0)
+flood = []
+Nov = []
+sub = []
 
-Lr=LogisticRegression()
-
-Lr.fit(X,y1)
-print(Lr.score(X,y1))
-
-q1=575
-w1=830
-e1=760
-
-q2=0
-w2=0
-e2=0
-
-
-l=[[q1,w1,e1],[q2,w2,e2],[50,300,205]]
-
-f1=Lr.predict(l)
-
-
-for i in range(len(f1)):
-    
-    if len(x1) == 0:
-        print('')
-
-    if (int(f1[i])==1):
-        print(f1[i],"- possibility of  severe flood")
+for i in range(len(x1)):
+    if x1[i] > 500:
+        flood.append(1)
     else:
-        print(f1[i],"- no chance of severe flood")
+        flood.append(0)
+        
+for k in range(len(x1)):
+    Nov.append(z1[k] / 3)
+    sub.append(abs(w1[k] - z1[k]))
+    
+x["flood"] = flood
+x["avgnov"] = Nov
+x["sub"] = sub
+
+x.to_csv("out.csv", index=False)
+print(x.head())
+
+X = x[['Oct-Dec', 'OCT', 'NOV']].values
+y = np.array(flood)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.InputLayer(input_shape=(X_train.shape[1],)),
+    tf.keras.layers.Dense(1, activation='sigmoid')
+])
+
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
+
+y_pred = (model.predict(X_test) > 0.5).astype(int)
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Model Accuracy: {accuracy * 100:.2f}%")
+
+new_data = np.array([[575, 830, 760], [0, 0, 0], [50, 300, 205]])
+flood_predictions = (model.predict(new_data) < 0.5).astype(int)
+
+for i, prediction in enumerate(flood_predictions):
+    if prediction == 1:
+        print(f"Data point {i+1}: Possibility of severe flood")
+    else:
+        print(f"Data point {i+1}: No chance of severe flood")
+
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+tflite_model = converter.convert()
+
+with open("flood_prediction_model.tflite", "wb") as f:
+    f.write(tflite_model)
+
+print("Model successfully converted to TensorFlow Lite!")
